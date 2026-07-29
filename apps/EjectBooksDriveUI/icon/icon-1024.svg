@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <title>Eject Books Drive</title>
+  <rect x="60" y="60" width="904" height="904" rx="212" fill="#121314"></rect>
+  <g transform="translate(512,544) scale(1.12) translate(-512,-544)">
+    <path d="M300 522 A212 212 0 0 1 724 522" fill="none" stroke="#F1F0EC" stroke-width="48"></path>
+    <rect x="262" y="496" width="80" height="164" rx="36" fill="#E8A33D"></rect>
+    <rect x="682" y="496" width="80" height="164" rx="36" fill="#E8A33D"></rect>
+    <path d="M372 534 L512 574 L652 534 L652 738 L512 778 L372 738 Z" fill="#F1F0EC"></path>
+    <path d="M512 578 L512 774" stroke="#121314" stroke-width="22"></path>
+  </g>
+  <path d="M800 200 L852 256 L748 256 Z" fill="#E8A33D"></path>
+  <rect x="748" y="276" width="104" height="30" rx="9" fill="#E8A33D"></rect>
+</svg>

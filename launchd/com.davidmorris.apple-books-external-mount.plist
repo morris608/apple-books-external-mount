@@ -3,10 +3,10 @@
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>com.davidmorris.books-media</string>
+  <string>com.davidmorris.apple-books-external-mount</string>
   <key>ProgramArguments</key>
   <array>
-    <string>/Users/davidmorris/GitHub/apple-books-external-mount/scripts/books-media.sh</string>
+    <string>/Users/davidmorris/GitHub/apple-books-external-mount/scripts/apple-books-external-mount.sh</string>
     <string>ensure</string>
   </array>
   <key>RunAtLoad</key>
@@ -16,9 +16,9 @@
   <key>StartOnMount</key>
   <true/>
   <key>StandardOutPath</key>
-  <string>/Users/davidmorris/Library/Logs/books-media/launchd.out.log</string>
+  <string>/Users/davidmorris/Library/Logs/apple-books-external-mount/launchd.out.log</string>
   <key>StandardErrorPath</key>
-  <string>/Users/davidmorris/Library/Logs/books-media/launchd.err.log</string>
+  <string>/Users/davidmorris/Library/Logs/apple-books-external-mount/launchd.err.log</string>
   <key>ProcessType</key>
   <string>Background</string>
 </dict>

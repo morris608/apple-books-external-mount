@@ -15,19 +15,22 @@ Mount Apple Books audiobook media from external storage at the container path so
 | Populated media image | `.../BooksSafety/phase0b-populated.sparsebundle` |
 | Internal aside (rollback) | `Audiobooks.internal-aside` — **keep until soak + 2nd backup** |
 | Legacy `25External/ibooks` | Keep until production multiply verified |
-| LaunchAgent | Installed (`com.davidmorris.books-media`) |
+| LaunchAgent | Installed (`com.davidmorris.apple-books-external-mount`) |
 | Reclaim ~331 GB | Pending aside delete after soak |
 
 ## Commands
 
-**Eject (recommended):** double-click **`Eject Books Drive.command`** on the Desktop (opens Terminal with progress). Do not use Finder’s ⏏ on `25External`.
+**Eject (recommended):** double-click **`Eject Books Drive`** on the Desktop (Plate SwiftUI window — 3s cancel, then eject). Do not use Finder’s ⏏ on `25External`.
+
+Rebuild after UI changes: `./apps/EjectBooksDriveUI/build.sh`  
+Design system: [docs/DESIGN.md](docs/DESIGN.md) · [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md)
 
 ```bash
 cd ~/GitHub/apple-books-external-mount
-./scripts/books-media.sh status
-./scripts/books-media.sh mount
-./scripts/books-media.sh unmount   # keep drive plugged
-./scripts/books-media.sh eject     # then unplug when Finder clears
+./scripts/apple-books-external-mount.sh status
+./scripts/apple-books-external-mount.sh mount
+./scripts/apple-books-external-mount.sh unmount   # keep drive plugged
+./scripts/apple-books-external-mount.sh eject     # then unplug when Finder clears
 ```
 
 ## Docs

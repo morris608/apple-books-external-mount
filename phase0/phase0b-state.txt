@@ -2,6 +2,6 @@ STATUS=production_soak
 MOUNTED=1
 ASIDE=Audiobooks.internal-aside
 IMAGE=/Volumes/25External/BooksSafety/phase0b-populated.sparsebundle
-LAUNCHAGENT=com.davidmorris.books-media
+LAUNCHAGENT=com.davidmorris.apple-books-external-mount
 UPDATED=$(date -Iseconds)
 NEXT=soak_then_second_backup_then_delete_aside

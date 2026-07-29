@@ -1,4 +1,4 @@
-# BooksMedia runbook
+# apple-books-external-mount runbook
 
 Serve Apple Books audiobooks from an external sparsebundle mounted at the Books container path.
 
@@ -18,13 +18,13 @@ Serve Apple Books audiobooks from an external sparsebundle mounted at the Books 
 
 Finder’s eject button next to **25External** does **not** run Books cleanup first. Use:
 
-**Desktop:** double-click **`Eject Books Drive.command`** (opens Terminal with progress).  
-Do **not** use the old AppleScript `.app` if it’s still around — it could hang silently.
+**Desktop:** double-click **`Eject Books Drive`** (Plate UI: 3s cancel → eject, activity log, safe-to-unplug).  
+Rebuild: `./apps/EjectBooksDriveUI/build.sh`. Visual check: `--preview=succeeded` / `--preview=partial`.
 
 Equivalent terminal:
 
 ```bash
-~/GitHub/apple-books-external-mount/scripts/books-media.sh eject
+~/GitHub/apple-books-external-mount/scripts/apple-books-external-mount.sh eject
 ```
 
 If Time Machine shows a **spinner** next to it in Finder, eject will stop that backup first; wait for the Terminal message **SAFE TO UNPLUG**.
@@ -40,7 +40,7 @@ If Time Machine shows a **spinner** next to it in Finder, eject will stop that b
 ## Safe eject (always)
 
 1. Quit any Finder iPhone sync.
-2. `./scripts/books-media.sh eject`
+2. `./scripts/apple-books-external-mount.sh eject`
 3. Wait until `25External` disappears from Finder / `/Volumes`.
 4. Unplug.
 
@@ -49,8 +49,8 @@ Do **not** yank the cable while the sparsebundle is attached.
 ## After a reboot
 
 1. Plug in `25External` (and unlock/mount if needed).
-2. LaunchAgent should remount within ~30s (`./scripts/books-media.sh status` to confirm).
-3. Or run `./scripts/books-media.sh mount` manually.
+2. LaunchAgent should remount within ~30s (`./scripts/apple-books-external-mount.sh status` to confirm).
+3. Or run `./scripts/apple-books-external-mount.sh mount` manually.
 
 ## Cutover notes from Phase 0b
 
@@ -74,4 +74,4 @@ Only after production soak above — multiple independent checks that BooksSafet
 
 ## Logs
 
-`~/Library/Logs/books-media/`
+`~/Library/Logs/apple-books-external-mount/`
