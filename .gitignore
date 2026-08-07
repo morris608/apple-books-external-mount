@@ -3,3 +3,5 @@
 **/Icon?
 *.log
 /tmp/
+# Built launchd entry point — rebuild with: cc -o bin/abe-launcher scripts/abe-launcher.c
+/bin/

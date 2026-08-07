@@ -15,7 +15,7 @@ Mount Apple Books audiobook media from external storage at the container path so
 | Populated media image | `.../BooksSafety/phase0b-populated.sparsebundle` |
 | Internal aside (rollback) | `Audiobooks.internal-aside` — **keep until soak + 2nd backup** |
 | Legacy `25External/ibooks` | Keep until production multiply verified |
-| LaunchAgent | Installed (`com.davidmorris.apple-books-external-mount`) |
+| LaunchAgent | Installed (`com.davidmorris.apple-books-external-mount`) — runs `bin/abe-launcher`; needs Full Disk Access ([RUNBOOK](docs/RUNBOOK.md#launchagent-needs-full-disk-access-2026-08-07-incident)) |
 | Reclaim ~331 GB | Pending aside delete after soak |
 
 ## Commands

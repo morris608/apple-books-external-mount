@@ -6,7 +6,9 @@
   <string>com.davidmorris.apple-books-external-mount</string>
   <key>ProgramArguments</key>
   <array>
-    <string>/Users/davidmorris/GitHub/apple-books-external-mount/scripts/apple-books-external-mount.sh</string>
+    <!-- Launcher binary (not zsh directly) so the job has its own TCC
+         identity — grant it Full Disk Access in System Settings. -->
+    <string>/Users/davidmorris/GitHub/apple-books-external-mount/bin/abe-launcher</string>
     <string>ensure</string>
   </array>
   <key>RunAtLoad</key>

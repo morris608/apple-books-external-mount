@@ -52,6 +52,49 @@ Do **not** yank the cable while the sparsebundle is attached.
 2. LaunchAgent should remount within ~30s (`./scripts/apple-books-external-mount.sh status` to confirm).
 3. Or run `./scripts/apple-books-external-mount.sh mount` manually.
 
+## LaunchAgent needs Full Disk Access (2026-08-07 incident)
+
+launchd jobs get no TCC access: run as bare `zsh`, the agent could not `rm`
+inside the Books container **or read the sparsebundle on the external drive**
+(`mount_apfs: cannot open backing store … Operation not permitted`), so
+automatic remount silently failed and the ~30s retry loop force-quit Books on
+every attempt, making the app look empty.
+
+Fixes in place:
+
+- The agent now runs via `bin/abe-launcher` (build: `cc -o bin/abe-launcher scripts/abe-launcher.c`).
+  **Grant it Full Disk Access**: System Settings → Privacy & Security →
+  Full Disk Access → add `bin/abe-launcher`. Re-grant after any rebuild
+  (ad-hoc signature). Until granted, automatic remount fails and mounting
+  must be done manually from a terminal.
+- On any mount failure the script now logs the reason, backs off 900s
+  (no more Books kill-loop), and says to run `mount` manually.
+
+## Reading `status` when the agent did the mounting
+
+When the LaunchAgent (not your terminal) performed the mount, terminals may get
+"Operation not permitted" reading the mounted Audiobooks path — so
+`status` can report `sha1 folders visible: 0` **while everything is healthy**.
+Trust these instead: the agent log's last `mounted OK; sha1 folders=688` line,
+the Books app showing covers, or a working Finder sync.
+
+## If Finder loses the Podcasts/Audiobooks/Books tabs
+
+Seen 2026-08-07 after the kill-loop incident: the device page showed only
+General/Music/Movies/TV/Photos/Files/Info. Those three tabs are served by
+per-app daemons, and restarting them (`bookassetd`, `AMPDevicesAgent`,
+Finder) was NOT enough — neither was rebooting the iPhone. **Reboot the Mac.**
+(Also ruled out: the iPhone's Settings → Apps → Books → iCloud Drive toggle,
+which when ON legitimately hides those tabs.)
+
+## Finder sync can wipe the phone while the drive is absent
+
+If the iPhone connects while the Audiobooks mount is down, an automatic
+Finder sync sees an **empty** library and removes synced audiobooks from the
+phone (happened 2026-08-07 — plugged in to charge with drive unplugged).
+In Finder → iPhone → General, **uncheck "Automatically sync when this iPhone
+is connected"**. Only sync manually, after `status` shows the mount healthy.
+
 ## Cutover notes from Phase 0b
 
 - Symlinks fail (sandbox). Whole-root mount works.

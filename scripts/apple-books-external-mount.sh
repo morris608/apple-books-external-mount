@@ -159,6 +159,17 @@ detach_image() {
   fi
 }
 
+mount_failed() {
+  # Log, then back off so the LaunchAgent doesn't retry-loop — each retry
+  # kills Books, which made the app unusable (2026-08-07 incident).
+  local why="$1"
+  log "mount failed: ${why}"
+  log "backing off 900s — recover manually: ./scripts/apple-books-external-mount.sh mount (from Terminal)"
+  inhibit_mount 900
+  notify "apple-books-external-mount" "Mount failed: ${why}"
+  exit 1
+}
+
 cmd_status() {
   print "external: $(external_mounted && print mounted || print absent) (/Volumes/${ABE_EXTERNAL_NAME})"
   print "image: ${ABE_IMAGE}"
@@ -200,34 +211,36 @@ cmd_mount() {
     exit 1
   fi
 
+  # Attach before quitting Books — if the image can't attach there is no point
+  # killing Books, and failing here must not leave Books dead every 30s.
+  attach_image || mount_failed "cannot attach image ${ABE_IMAGE}"
+
   quit_books
-  attach_image || {
-    notify "apple-books-external-mount" "Failed to attach image"
-    exit 1
-  }
   sweep_strays
 
-  if [[ -d "${ABE_AUDIOBOOKS_PATH}" ]] && ! audiobooks_is_mount; then
-    # Should be empty local dir after cutover
-    rm -rf "${ABE_AUDIOBOOKS_PATH}"
+  if [[ ! -d "${ABE_AUDIOBOOKS_PATH}" ]]; then
+    mkdir -p "${ABE_AUDIOBOOKS_PATH}" || mount_failed "cannot create mountpoint"
+  elif [[ -n "$(ls -A "${ABE_AUDIOBOOKS_PATH}" 2>/dev/null)" ]]; then
+    # Leftover strays would be shadowed by the mount. NB: this rm is denied
+    # (TCC) when run from launchd — surface that instead of dying under set -e.
+    rm -rf "${ABE_AUDIOBOOKS_PATH:?}"/* 2>>"$LOG" \
+      || mount_failed "cannot clear mountpoint (TCC denies rm from launchd; run from Terminal)"
   fi
-  mkdir -p "${ABE_AUDIOBOOKS_PATH}"
 
   # Unmount default /Volumes mountpoint then remount hidden at Audiobooks path
-  mount_at_audiobooks || {
+  if ! mount_at_audiobooks; then
     # Fallback if mount_apfs nobrowse fails
     /usr/sbin/diskutil unmount "/Volumes/${ABE_VOLUME_NAME}" >/dev/null 2>&1 || true
-    /usr/sbin/diskutil mount -mountPoint "${ABE_AUDIOBOOKS_PATH}" "${ABE_VOLUME_NAME}"
-  }
+    /usr/sbin/diskutil mount -mountPoint "${ABE_AUDIOBOOKS_PATH}" "${ABE_VOLUME_NAME}" \
+      || mount_failed "mount_apfs and diskutil mount both failed"
+  fi
   if audiobooks_is_mount; then
     local n
     n="$(find "${ABE_AUDIOBOOKS_PATH}" -mindepth 1 -maxdepth 1 -type d -name 'sha1-*' | wc -l | tr -d ' ')"
     log "mounted OK; sha1 folders=${n}"
     notify "apple-books-external-mount" "Mounted (${n} books)"
   else
-    log "mount failed"
-    notify "apple-books-external-mount" "Mount failed"
-    exit 1
+    mount_failed "volume attached but not mounted at Audiobooks path"
   fi
 }
 
