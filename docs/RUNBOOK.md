@@ -135,12 +135,23 @@ the Books app showing covers, or a working Finder sync.
 
 ## If Finder loses the Podcasts/Audiobooks/Books tabs
 
-Seen 2026-08-07 after the kill-loop incident: the device page showed only
-General/Music/Movies/TV/Photos/Files/Info. Those three tabs are served by
-per-app daemons, and restarting them (`bookassetd`, `AMPDevicesAgent`,
-Finder) was NOT enough — neither was rebooting the iPhone. **Reboot the Mac.**
-(Also ruled out: the iPhone's Settings → Apps → Books → iCloud Drive toggle,
-which when ON legitimately hides those tabs.)
+**Fix: reboot the Mac.** Then plug the phone in; the tabs are back.
+
+Seen 2026-08-07 and again 2026-09-09, both times right after the Books catalog
+had been empty/pruned and then restored: the device page shows only
+General/Music/Movies/TV/Photos/Files/Info. Things that were tried and did
+**not** work — don't re-test them:
+
+- restarting `bookassetd`, `com.apple.BKAgentService`, `AMPDevicesAgent`,
+  `AMPDeviceDiscoveryAgent`, Finder
+- rebooting the iPhone
+- unplug/replug, new Finder window
+- quitting Books.app before connecting the phone (2026-09-09)
+- the iPhone's Settings → Apps → Books → iCloud Drive toggle (it was off; when
+  ON it legitimately hides these tabs, so still worth a glance)
+
+Untested idea for a no-reboot fix: restart the root USB device daemon,
+`sudo launchctl kickstart -k system/com.apple.usbmuxd`, then replug.
 
 ## Finder sync can wipe the phone while the drive is absent
 
