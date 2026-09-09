@@ -150,8 +150,9 @@ General/Music/Movies/TV/Photos/Files/Info. Things that were tried and did
 - the iPhone's Settings → Apps → Books → iCloud Drive toggle (it was off; when
   ON it legitimately hides these tabs, so still worth a glance)
 
-Untested idea for a no-reboot fix: restart the root USB device daemon,
-`sudo launchctl kickstart -k system/com.apple.usbmuxd`, then replug.
+- restarting the root USB daemon (`sudo launchctl kickstart -k
+  system/com.apple.usbmuxd`) — refused: "Operation not permitted while System
+  Integrity Protection is engaged" (2026-09-09). No no-reboot fix is known.
 
 ## Finder sync can wipe the phone while the drive is absent
 
