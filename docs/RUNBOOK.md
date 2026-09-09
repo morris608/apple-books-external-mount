@@ -34,8 +34,63 @@ If Time Machine shows a **spinner** next to it in Finder, eject will stop that b
 ## Expected behavior
 
 - **Drive plugged + mounted:** Books looks normal (covers, play, Finder→iPhone).
-- **Drive safely ejected:** titles/collections remain; most covers blank until remount. Phone keeps already-synced books.
+- **Drive absent: do not open Books.** Books **prunes its catalog** (BKLibrary
+  assets + `Books.plist`) when it runs without the media — the library shows
+  only cloud purchases and every collection reads "No Books". Happened
+  2026-08-07 and 2026-09-09. (The earlier note that "titles remain" was based on
+  short tests and is wrong.) The agent guard quits Books within ~30s if it is
+  launched while unmounted, and the catalog auto-heals on the next mount — see
+  *Catalog protection* below.
+- **Phone:** keeps already-synced books as long as Finder auto-sync is off.
 - **Imports while unmounted:** land in the empty local `Audiobooks` dir; next `mount`/`ensure` sweeps them onto the image (tag new `.m4b` with `AtomicParsley --stik Audiobook` so Finder sync lists them).
+
+## Catalog protection (added 2026-09-09)
+
+| Piece | What it does |
+|---|---|
+| `guard_books` (every `ensure`, 30s) | If Books/BKAgentService is running and the media is **not** mounted, quits Books and logs `GUARD: …`. Disable with `ABE_GUARD_BOOKS=0`. |
+| `backup_catalog` (after `mount`, before `unmount`/`eject`) | Copies BKLibrary, BKSeries and `Books.plist` to `/Volumes/25External/BooksSafety/catalog/<stamp>/` and points `latest` at it. Keeps `ABE_CATALOG_KEEP` (10). **Refuses** to save a pruned catalog (`< ABE_CATALOG_MIN_PATHS` path entries, default 1000 ≈ 500 books) or one >10% smaller than `latest`. |
+| auto-heal (in `mount`) | After a successful mount, if the live catalog looks pruned and `catalog/latest` exists, restores from it automatically and relaunches Books. |
+| `restore-catalog [dir]` | Manual restore. Default source: `catalog/latest`, else the 7/26 metadata snapshot. Requires the media mounted (otherwise Books would prune again). Saves the pruned catalog to `catalog/pruned-<stamp>/`. |
+| `backup-catalog` | Manual backup (quits Books first). |
+
+Healthy `Books.plist` for this library: **1386** path entries (2 per audiobook).
+
+## Running commands with Full Disk Access when the terminal has none
+
+Sandboxed shells (e.g. Cursor's) hang or get "Operation not permitted" inside
+the Books containers. Run through the launcher under launchd instead — but
+**not** `launchctl submit`, which re-runs the job forever. Use a one-shot plist:
+
+```bash
+cat > /tmp/abe-oneshot.plist <<'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>com.davidmorris.abe-oneshot</string>
+  <key>ProgramArguments</key><array>
+    <string>/Users/davidmorris/GitHub/apple-books-external-mount/bin/abe-launcher</string>
+    <string>restore-catalog</string>
+  </array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><false/>
+</dict></plist>
+EOF
+launchctl bootstrap "gui/$(id -u)" /tmp/abe-oneshot.plist
+sleep 15; tail -3 ~/Library/Logs/apple-books-external-mount/apple-books-external-mount.log
+launchctl bootout "gui/$(id -u)/com.davidmorris.abe-oneshot"; rm /tmp/abe-oneshot.plist
+```
+
+(`abe-launcher` forwards only its first argument.)
+
+## First attach after plugging in can fail transiently
+
+2026-09-09: `hdiutil: attach failed - no mountable file systems` seconds after
+`25External` appeared (disk settling + Time Machine starting on the same
+enclosure); `fsck_apfs -n` on the image was clean and the retry mounted fine.
+Attach failures now back off only 120s (Books is not quit before attach, so a
+retry is harmless). If it persists: `hdiutil attach -nomount <image>` then
+`fsck_apfs -n /dev/rdiskNs1` on the APFS volume.
 
 ## Safe eject (always)
 

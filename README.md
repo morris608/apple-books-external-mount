@@ -31,7 +31,13 @@ cd ~/GitHub/apple-books-external-mount
 ./scripts/apple-books-external-mount.sh mount
 ./scripts/apple-books-external-mount.sh unmount   # keep drive plugged
 ./scripts/apple-books-external-mount.sh eject     # then unplug when Finder clears
+./scripts/apple-books-external-mount.sh restore-catalog   # Books shows only cloud books / "No Books"
+./scripts/apple-books-external-mount.sh backup-catalog
 ```
+
+**Never open Books while the drive is unplugged** — Books prunes its catalog
+without the media. The agent quits it if you do, and heals the catalog from
+`BooksSafety/catalog/latest` on the next mount ([RUNBOOK](docs/RUNBOOK.md#catalog-protection-added-2026-09-09)).
 
 ## Docs
 

@@ -79,7 +79,132 @@ quit_books() {
   sleep 2
   /usr/bin/killall -9 Books 2>/dev/null || true
   /usr/bin/killall -9 com.apple.BKAgentService 2>/dev/null || true
+  # bookassetd serves the catalog to Finder sync and caches it; a stale copy
+  # hid the Audiobooks tab after the 2026-08-07 restore. It respawns on demand.
+  /usr/bin/killall bookassetd 2>/dev/null || true
   sleep 1
+}
+
+books_running() {
+  /usr/bin/pgrep -x Books >/dev/null 2>&1 || /usr/bin/pgrep -x com.apple.BKAgentService >/dev/null 2>&1
+}
+
+guard_books() {
+  # Books prunes its catalog (BKLibrary + Books.plist) when it runs while the
+  # media is absent — happened 2026-08-07 and 2026-09-09. Quit it fast.
+  (( ${ABE_GUARD_BOOKS:-1} )) || return 0
+  audiobooks_is_mount && return 0
+  if books_running; then
+    log "GUARD: Books running without media mounted — quitting it to protect the catalog (mount ${ABE_EXTERNAL_NAME} first)"
+    quit_books
+  fi
+}
+
+catalog_path_count() {
+  # Number of asset "path" entries in a Books.plist (2 per audiobook). 0 if unreadable.
+  local plist="${1:-${ABE_BOOKS_PLIST}}" n=0
+  if [[ -f "${plist}" ]]; then
+    n="$(/usr/bin/plutil -convert xml1 -o - "${plist}" 2>/dev/null | /usr/bin/grep -c '<key>path</key>')" || n=0
+  fi
+  print -r -- "${n:-0}"
+}
+
+backup_catalog() {
+  # Snapshot BKLibrary, BKSeries and Books.plist to the external drive. Call
+  # with Books quit. Refuses to save a pruned catalog, and refuses to save one
+  # noticeably smaller than the last good backup (partial prune).
+  setopt LOCAL_OPTIONS NULL_GLOB
+  local n last_n=0
+  n="$(catalog_path_count)"
+  if (( n < ABE_CATALOG_MIN_PATHS )); then
+    log "catalog backup SKIPPED: Books.plist has ${n} path entries (< ${ABE_CATALOG_MIN_PATHS}) — looks pruned; run: $0 restore-catalog"
+    return 0
+  fi
+  if [[ -f "${ABE_CATALOG_BACKUP_DIR}/latest/Books.plist" ]]; then
+    last_n="$(catalog_path_count "${ABE_CATALOG_BACKUP_DIR}/latest/Books.plist")"
+    if (( n * 10 < last_n * 9 )); then
+      log "catalog backup SKIPPED: ${n} path entries vs ${last_n} in last backup — possible partial prune"
+      return 0
+    fi
+  fi
+  if ! external_mounted; then
+    log "catalog backup skipped: ${ABE_EXTERNAL_NAME} absent"
+    return 0
+  fi
+  local stamp="$(date '+%Y%m%dT%H%M%S')"
+  local dest="${ABE_CATALOG_BACKUP_DIR}/${stamp}"
+  mkdir -p "${dest}" || { log "catalog backup failed: cannot create ${dest}"; return 0; }
+  cp "${ABE_BKLIBRARY_DIR}"/BKLibrary-*.sqlite* "${dest}/" 2>>"$LOG" || true
+  cp "${ABE_BKSERIES_DIR}"/BKSeries-*.sqlite* "${dest}/" 2>>"$LOG" || true
+  cp "${ABE_BOOKS_PLIST}" "${dest}/" 2>>"$LOG" || true
+  local -a libs=("${dest}"/BKLibrary-*.sqlite)
+  if [[ -f "${dest}/Books.plist" && ${#libs} -gt 0 ]]; then
+    rm -f "${ABE_CATALOG_BACKUP_DIR}/latest"
+    ln -s "${stamp}" "${ABE_CATALOG_BACKUP_DIR}/latest"
+    log "catalog backed up: ${dest} (${n} path entries)"
+    local -a old=("${ABE_CATALOG_BACKUP_DIR}"/2*(/N))
+    while (( ${#old} > ABE_CATALOG_KEEP )); do
+      rm -rf "${old[1]}"
+      shift old
+    done
+  else
+    log "catalog backup INCOMPLETE at ${dest} — check ${LOG}"
+    rm -rf "${dest}"
+  fi
+}
+
+restore_catalog_from() {
+  # Replace the live catalogs with the copies in $1 (flat dir: BKLibrary-*.sqlite*,
+  # BKSeries-*.sqlite*, Books.plist). Requires the media to be mounted, otherwise
+  # Books would prune the restored catalog again on launch. Relaunches Books.
+  setopt LOCAL_OPTIONS NULL_GLOB
+  local src="$1" n
+  [[ -f "${src}/Books.plist" ]] || { log "restore-catalog: no Books.plist in ${src}"; return 1; }
+  n="$(catalog_path_count "${src}/Books.plist")"
+  if (( n < ABE_CATALOG_MIN_PATHS )); then
+    log "restore-catalog: source ${src} looks pruned (${n} path entries); refusing"
+    return 1
+  fi
+  if ! audiobooks_is_mount; then
+    log "restore-catalog: media not mounted at ${ABE_AUDIOBOOKS_PATH}; mount first"
+    return 1
+  fi
+  quit_books
+  local stamp="$(date '+%Y%m%dT%H%M%S')"
+  local pruned="${ABE_CATALOG_BACKUP_DIR}/pruned-${stamp}"
+  mkdir -p "${pruned}"
+  cp "${ABE_BKLIBRARY_DIR}"/BKLibrary-*.sqlite* "${pruned}/" 2>/dev/null || true
+  cp "${ABE_BKSERIES_DIR}"/BKSeries-*.sqlite* "${pruned}/" 2>/dev/null || true
+  cp "${ABE_BOOKS_PLIST}" "${pruned}/" 2>/dev/null || true
+  rm -f "${ABE_BKLIBRARY_DIR}"/BKLibrary-*.sqlite* "${ABE_BKSERIES_DIR}"/BKSeries-*.sqlite*
+  cp "${src}"/BKLibrary-*.sqlite* "${ABE_BKLIBRARY_DIR}/" || { log "restore-catalog: BKLibrary copy failed"; return 1; }
+  cp "${src}"/BKSeries-*.sqlite* "${ABE_BKSERIES_DIR}/" || { log "restore-catalog: BKSeries copy failed"; return 1; }
+  cp "${src}/Books.plist" "${ABE_BOOKS_PLIST}" || { log "restore-catalog: Books.plist copy failed"; return 1; }
+  log "catalog restored from ${src} (${n} path entries); pruned copy saved at ${pruned}"
+  notify "apple-books-external-mount" "Books catalog restored (${n} entries)"
+  /usr/bin/open -a Books 2>/dev/null || true
+}
+
+cmd_backup_catalog() {
+  acquire_lock
+  trap release_lock EXIT
+  quit_books
+  backup_catalog
+}
+
+cmd_restore_catalog() {
+  acquire_lock
+  trap release_lock EXIT
+  local src="${1:-}"
+  if [[ -z "${src}" ]]; then
+    if [[ -f "${ABE_CATALOG_BACKUP_DIR}/latest/Books.plist" ]]; then
+      src="${ABE_CATALOG_BACKUP_DIR}/latest"
+    else
+      src="${ABE_CATALOG_FALLBACK}"
+      log "restore-catalog: no agent backup yet; using fallback ${src}"
+    fi
+  fi
+  restore_catalog_from "${src}"
 }
 
 sweep_strays() {
@@ -162,10 +287,10 @@ detach_image() {
 mount_failed() {
   # Log, then back off so the LaunchAgent doesn't retry-loop — each retry
   # kills Books, which made the app unusable (2026-08-07 incident).
-  local why="$1"
+  local why="$1" secs="${2:-900}"
   log "mount failed: ${why}"
-  log "backing off 900s — recover manually: ./scripts/apple-books-external-mount.sh mount (from Terminal)"
-  inhibit_mount 900
+  log "backing off ${secs}s — recover manually: ./scripts/apple-books-external-mount.sh mount (from Terminal)"
+  inhibit_mount "${secs}"
   notify "apple-books-external-mount" "Mount failed: ${why}"
   exit 1
 }
@@ -213,7 +338,10 @@ cmd_mount() {
 
   # Attach before quitting Books — if the image can't attach there is no point
   # killing Books, and failing here must not leave Books dead every 30s.
-  attach_image || mount_failed "cannot attach image ${ABE_IMAGE}"
+  # Attach can fail transiently right after the drive appears (disk settling,
+  # Time Machine starting on the same enclosure — 2026-09-09); Books has not
+  # been quit yet, so a short retry is safe.
+  attach_image || mount_failed "cannot attach image ${ABE_IMAGE}" 120
 
   quit_books
   sweep_strays
@@ -242,6 +370,23 @@ cmd_mount() {
   else
     mount_failed "volume attached but not mounted at Audiobooks path"
   fi
+
+  # Catalog care. If Books ran while the media was absent, the catalog is
+  # pruned: heal it from our latest backup when we have one. Otherwise it is
+  # intact and worth backing up now.
+  local paths
+  paths="$(catalog_path_count)"
+  if (( paths < ABE_CATALOG_MIN_PATHS )); then
+    if [[ -f "${ABE_CATALOG_BACKUP_DIR}/latest/Books.plist" ]]; then
+      log "catalog looks pruned (${paths} path entries) — auto-restoring from ${ABE_CATALOG_BACKUP_DIR}/latest"
+      restore_catalog_from "${ABE_CATALOG_BACKUP_DIR}/latest" || log "auto-restore failed; run: $0 restore-catalog"
+    else
+      log "catalog looks pruned (${paths} path entries) and no agent backup exists — run: $0 restore-catalog"
+      notify "apple-books-external-mount" "Books catalog pruned — run restore-catalog"
+    fi
+  else
+    backup_catalog
+  fi
 }
 
 cmd_unmount() {
@@ -253,6 +398,7 @@ cmd_unmount() {
   /bin/sync
 
   if audiobooks_is_mount; then
+    backup_catalog
     /usr/sbin/diskutil unmount "${ABE_AUDIOBOOKS_PATH}" || /usr/sbin/diskutil unmount force "${ABE_AUDIOBOOKS_PATH}"
   fi
   # Also clear a stray default mount if present
@@ -311,6 +457,7 @@ cmd_eject() {
   /bin/sync
 
   if audiobooks_is_mount; then
+    backup_catalog
     /usr/sbin/diskutil unmount "${ABE_AUDIOBOOKS_PATH}" || /usr/sbin/diskutil unmount force "${ABE_AUDIOBOOKS_PATH}" || true
   fi
   /usr/sbin/diskutil unmount "/Volumes/${ABE_VOLUME_NAME}" >/dev/null 2>&1 || true
@@ -349,7 +496,9 @@ cmd_eject() {
 }
 
 cmd_ensure() {
-  # Called by LaunchAgent: if external is present and aside exists, mount.
+  # Called by LaunchAgent every 30s: protect the catalog, then mount if the
+  # external is present and the aside exists.
+  guard_books
   if mount_inhibited; then
     log "ensure skipped — mount inhibited (eject cooldown)"
     exit 0
@@ -369,7 +518,7 @@ cmd_ensure() {
 }
 
 usage() {
-  print "Usage: $0 {status|mount|unmount|eject|ensure}"
+  print "Usage: $0 {status|mount|unmount|eject|ensure|backup-catalog|restore-catalog [source-dir]}"
   exit 2
 }
 
@@ -381,6 +530,8 @@ main() {
     unmount) cmd_unmount ;;
     eject) cmd_eject ;;
     ensure) cmd_ensure ;;
+    backup-catalog) cmd_backup_catalog ;;
+    restore-catalog) cmd_restore_catalog "${2:-}" ;;
     *) usage ;;
   esac
 }
