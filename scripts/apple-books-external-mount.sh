@@ -517,8 +517,57 @@ cmd_ensure() {
   cmd_mount
 }
 
+cmd_snapshot_catalog() {
+  # Read-only snapshot of Books catalog for audiobook-tracker.
+  # Does not acquire ABE_LOCK, does not call guard_books, and does not touch Books.app.
+  local snap="/Users/davidmorris/Library/Application Support/audiobook-tracker/snapshot_books.py"
+  if [[ ! -f "${snap}" ]]; then
+    log "snapshot-catalog: ${snap} missing; skipping"
+    return 0
+  fi
+  local out rc=0
+  out="$(/usr/bin/python3 "${snap}" 2>&1)" || rc=$?
+  if (( rc == 0 )); then
+    log "snapshot-catalog: completed (${out})"
+  else
+    log "snapshot-catalog: failed (exit ${rc}): ${out}"
+    return "${rc}"
+  fi
+}
+
+cmd_finisher_books_sync() {
+  acquire_lock
+  trap release_lock EXIT
+
+  if mount_inhibited; then
+    log "finisher-books-sync skipped — mount inhibited (eject cooldown)"
+    exit 0
+  fi
+  if ! external_mounted; then
+    log "finisher-books-sync skipped — ${ABE_EXTERNAL_NAME} not mounted"
+    exit 0
+  fi
+  if ! audiobooks_is_mount; then
+    log "finisher-books-sync skipped — media not mounted at ${ABE_AUDIOBOOKS_PATH}"
+    exit 0
+  fi
+
+  local tracker="/Users/davidmorris/Library/Application Support/audiobook-tracker"
+  local py="${tracker}/.venv/bin/python"
+  if [[ ! -x "${py}" ]]; then
+    log "finisher-books-sync skipped — ${py} not found"
+    exit 1
+  fi
+
+  log "finisher-books-sync: starting books-sync-fda"
+  local rc=0
+  PYTHONPATH="${tracker}" "${py}" -m audiobook_ops books-sync-fda 2>&1 | tee -a "$LOG" || rc=$?
+  log "finisher-books-sync: finished (exit ${rc})"
+  return "${rc}"
+}
+
 usage() {
-  print "Usage: $0 {status|mount|unmount|eject|ensure|backup-catalog|restore-catalog [source-dir]}"
+  print "Usage: $0 {status|mount|unmount|eject|ensure|backup-catalog|restore-catalog [source-dir]|snapshot-catalog|finisher-books-sync}"
   exit 2
 }
 
@@ -532,6 +581,8 @@ main() {
     ensure) cmd_ensure ;;
     backup-catalog) cmd_backup_catalog ;;
     restore-catalog) cmd_restore_catalog "${2:-}" ;;
+    snapshot-catalog) cmd_snapshot_catalog ;;
+    finisher-books-sync) cmd_finisher_books_sync ;;
     *) usage ;;
   esac
 }

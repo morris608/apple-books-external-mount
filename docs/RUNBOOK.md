@@ -83,6 +83,26 @@ launchctl bootout "gui/$(id -u)/com.davidmorris.abe-oneshot"; rm /tmp/abe-onesho
 
 (`abe-launcher` forwards only its first argument.)
 
+## Companion intake & tracker hooks (`snapshot-catalog`, `finisher-books-sync`)
+
+`~/Library/Application Support/audiobook-tracker/` runs the `audiobook_ops` intake daemon (`com.davidmorris.audiobook-ops`, web UI `http://127.0.0.1:8765/`) and static `Audiobook Tracker.html` builder. Because `bin/abe-launcher` already holds Full Disk Access (do not rebuild it unless prepared to re-grant FDA), `scripts/apple-books-external-mount.sh` exposes two dedicated subcommands so external tools never overwrite or swap repo scripts:
+
+| Subcommand | Lock / Mount checks | What it does |
+|---|---|---|
+| `snapshot-catalog` | Lockless; does not call `guard_books` or touch `Books.app` | Runs `snapshot_books.py` read-only (`?mode=ro` on `BKLibrary-*.sqlite` + `Books.plist`) to write `books.json`. |
+| `finisher-books-sync` | Acquires `ABE_LOCK`; requires `! mount_inhibited`, `external_mounted`, `audiobooks_is_mount` | Runs `.venv/bin/python -m audiobook_ops books-sync-fda` to archive `cloud_staged` `.m4b` files onto `/Volumes/25External/Audiobook Originals/`, import into `Books.app`, and assign collections in `BKLibrary`. |
+
+Operational invariants for `finisher-books-sync` and `launchd` callers:
+
+- **Silent `launchd` Removable Volumes TCC hang:** Under `launchd`, a non-FDA binary (e.g. Homebrew `.venv/bin/python` or `/usr/bin/python3`) touching `/Volumes/25External` can **hang indefinitely** waiting on an invisible `tccd` Removable Volumes prompt instead of failing with `EPERM`. Always probe `/Volumes/25External` in a short-timeout child (`2s`) and route `25External` + `Books` container work through `bin/abe-launcher` one-shot plists.
+- **Idle-only `Books.app` import:** `books-sync-fda` defers if `Books.app` is currently open or if Finder/iPhone device sync (`MDCrashReportTool`, `ATHost*`, `AMPDevicesAgent` >5% CPU) is running.
+- **Orphan `sha1-*` cleanup:** `Books.app` computes deterministic `sha1(UTF8(title))` folder names. Before `open -g -a Books <file>`, uncataloged `sha1-*` directories older than `180s` (not in `Books.plist`) are removed so `Books` never creates duplicate `Title 1.m4b` files.
+- **`BKLibrary` CoreData SQLite rules:** After `Books.app` commits the asset, quit `Books` + `BKAgentService` + `bookassetd`, back up `BKLibrary-*.sqlite*` and `Books.plist`, and run inside `BEGIN IMMEDIATE`:
+  - Assign both the target collection and `Want_To_Read_Collection_ID`.
+  - `ZBKCOLLECTIONMEMBER` has **no unique index** on `(ZCOLLECTION, ZASSET)`: always `SELECT` before `INSERT`, and populate **both** `ZASSET` (`Z_PK`) and `ZASSETID` (`sha1-...`).
+  - Bump `Z_PRIMARYKEY.Z_MAX` (`Z_ENT = 2` for `ZBKCOLLECTION`, `Z_ENT = 3` for `ZBKCOLLECTIONMEMBER`) to `max(Z_MAX, MAX(Z_PK)) + 1`.
+  - Leave `Books.app` closed afterward.
+
 ## First attach after plugging in can fail transiently
 
 2026-09-09: `hdiutil: attach failed - no mountable file systems` seconds after
