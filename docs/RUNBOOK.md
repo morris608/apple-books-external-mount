@@ -18,6 +18,8 @@ Serve Apple Books audiobooks from an external sparsebundle mounted at the Books 
 
 Finder’s eject button next to **25External** does **not** run Books cleanup first. Use:
 
+**Web dashboard (`http://127.0.0.1:8765/`):** click **Eject Drive** in the top bar (visible whenever `25External`, `Time Machine`, or `Phase0bPop` is mounted). The Plate modal preflights `25External`, `Time Machine`, and `Books`, blocks while `Books` or iPhone sync is active, invokes `bin/abe-launcher eject` via a one-shot `launchctl` plist, streams 4-step progress + `lsof` holder checks, and ejects **both** enclosure volumes.
+
 **Desktop:** double-click **`Eject Books Drive`** (Plate UI: 3s cancel → eject, activity log, safe-to-unplug).  
 Rebuild: `./apps/EjectBooksDriveUI/build.sh`. Visual check: `--preview=succeeded` / `--preview=partial`.
 
@@ -90,7 +92,9 @@ launchctl bootout "gui/$(id -u)/com.davidmorris.abe-oneshot"; rm /tmp/abe-onesho
 | Subcommand | Lock / Mount checks | What it does |
 |---|---|---|
 | `snapshot-catalog` | Lockless; does not call `guard_books` or touch `Books.app` | Runs `snapshot_books.py` read-only (`?mode=ro` on `BKLibrary-*.sqlite` + `Books.plist`) to write `books.json`. |
-| `finisher-books-sync` | Acquires `ABE_LOCK`; requires `! mount_inhibited`, `external_mounted`, `audiobooks_is_mount` | Runs `.venv/bin/python -m audiobook_ops books-sync-fda` to archive `cloud_staged` `.m4b` files onto `/Volumes/25External/Audiobook Originals/`, import into `Books.app`, and assign collections in `BKLibrary`. |
+| `finisher-books-sync` | Acquires `ABE_LOCK`; requires `! mount_inhibited`, `external_mounted`, `audiobooks_is_mount` | Runs `.venv/bin/python -m audiobook_ops books-sync-fda` locally first on `qa_verified` / `cloud_staged` `.m4b` files (while Google Drive uploads in parallel), archives onto `/Volumes/25External/Audiobook Originals/`, imports into `Books.app`, and assigns collections in `BKLibrary`. |
+
+For safe hardware disconnect, the dashboard's **Eject Drive** modal (`audiobook_ops/eject_drive.py`) also invokes `bin/abe-launcher eject` via a one-shot `launchctl` plist after checking that `Books` and iPhone Finder syncs are idle.
 
 Operational invariants for `finisher-books-sync` and `launchd` callers:
 
