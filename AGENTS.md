@@ -35,4 +35,7 @@ Operational rules:
   `INSERT` with both `ZASSET` and `ZASSETID` populated (including
   `Want_To_Read_Collection_ID`), `Z_PRIMARYKEY.Z_MAX` (`Z_ENT=2,3`) must be
   bumped, and `Books.app` must not be relaunched afterward.
-- Eject with the Desktop **Eject Books Drive** app or `… eject`, never Finder's ⏏.
+- Eject with the Audiobook Ops dashboard top-bar **Eject Drive** button
+  (`http://127.0.0.1:8765/`, Plate modal running `bin/abe-launcher eject` across
+  both `25External` and `Time Machine`), the Desktop **Eject Books Drive** app,
+  or `… eject` — never Finder's ⏏.
